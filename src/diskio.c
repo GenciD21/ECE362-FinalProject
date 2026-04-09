@@ -152,17 +152,16 @@ DSTATUS disk_initialize (
         return RES_NOTRDY;
     disable_sdcard();
     sdcard_init_clock();
-    //sdcard_io_high_speed();
     spi_clear_rxfifo(sd);
     enable_sdcard();
     value = sdcard_cmd(0, 0x00000000, 0x95); // Go to idle state
     if (value != 1)
         goto restart;
     disable_sdcard();
-
     enable_sdcard();
     value = sdcard_cmd(8, 0x000001aa, 0x87); // Check voltage range
     value = sdcard_r3();
+    
     disable_sdcard();
 
     do {

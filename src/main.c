@@ -4,7 +4,8 @@
 #include "diskio.h"
 #include <stdio.h>
 #include <string.h>
-
+#include "gpio_pio.h"
+#include "hardware/pio.h"
 
 /**SPI****************************************************************/
 #define spi1 ((spi_inst_t *)spi1_hw)
@@ -16,9 +17,8 @@
 
 void init_spi_sdcard() {
 
-
    gpio_set_function(SD_MISO, GPIO_FUNC_SPI);
-    gpio_set_function(SD_SCK, GPIO_FUNC_SPI);
+   gpio_set_function(SD_SCK, GPIO_FUNC_SPI);
    gpio_set_function(SD_MOSI, GPIO_FUNC_SPI);
 
    gpio_init(SD_CS);
@@ -74,13 +74,20 @@ void command_shell();
 
 int main() {
     // Initialize the standard input/output library
-    init_uart();
-    init_uart_irq();
+    // init_uart();
+    // init_uart_irq();
+    stdio_init_all();
+    init_pio_inputs();
     
-    init_sdcard_io();
+    // init_sdcard_io();
     
     // SD card functions will initialize everything.
-    command_shell();
+    // command_shell();
 
-    for(;;);
+    for(;;)
+    {
+         uint32_t output = get_buffer();
+    //    printf("DMA: %08x\n", output);
+        sleep_ms(500);
+    };
 }

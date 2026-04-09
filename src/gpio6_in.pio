@@ -1,0 +1,6 @@
+.program gpio6_in
+
+.wrap_target
+    in pins, 6      
+    push block     
+.wrap
