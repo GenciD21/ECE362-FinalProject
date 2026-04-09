@@ -1,0 +1,30 @@
+# Build artifacts
+build/
+*.o
+*.elf
+*.bin
+*.uf2
+*.map
+*.hex
+*.dis
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# IDEs & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python caches (from bin2header.py)
+__pycache__/
+*.pyc
