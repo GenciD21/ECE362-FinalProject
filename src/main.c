@@ -6,14 +6,16 @@
 #include <string.h>
 #include "gpio_pio.h"
 #include "hardware/pio.h"
+#include "lcd.h"
 
-/**SPI****************************************************************/
+/**SPI SD CARD****************************************************************/
 #define spi1 ((spi_inst_t *)spi1_hw)
 #define SD_MISO 12
-#define SD_CS 13
+#define SD_CS 17
 #define SD_SCK 14
-#define SD_MOSI 15
+#define SD_MOSI 15 
 /*******************************************************************/
+
 
 void init_spi_sdcard() {
 
@@ -72,13 +74,21 @@ void init_uart_irq();
 void date(int argc, char *argv[]);
 void command_shell();
 
+Picture* load_image(const char* image_data);
+void free_image(Picture* pic);
+
+
+
 int main() {
     // Initialize the standard input/output library
     // init_uart();
     // init_uart_irq();
     stdio_init_all();
     init_pio_inputs();
-    
+
+    run_spi(); //coment this to test the PIO because it does that infinite animation
+
+
     // init_sdcard_io();
     
     // SD card functions will initialize everything.
