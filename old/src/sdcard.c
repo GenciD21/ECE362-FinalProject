@@ -369,8 +369,10 @@ void cat(int argc, char *argv[])
 
         /* Read every line and display it */
 
+
         while(f_gets(line, sizeof line, &fil))
             printf(line);
+    
     
         /* Close the file */
         printf("%p\n", (void*)&fil);

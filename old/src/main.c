@@ -106,6 +106,8 @@ int main() {
 
     for(;;)
     {
-
-    }
+         uint32_t output = get_buffer();
+    //    printf("DMA: %08x\n", output);
+        sleep_ms(500);
+    };
 }
