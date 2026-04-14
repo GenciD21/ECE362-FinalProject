@@ -105,7 +105,8 @@ struct commands_t cmds[] = {
         { "mount", mount },
         { "pwd", pwd },
         { "rm", rm },
-        { "restart", restart }
+        { "restart", restart },
+        { "size", byte_size }
 };
 
 // This function inserts a string into the input buffer and echoes it to the UART
