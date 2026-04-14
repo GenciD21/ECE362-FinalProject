@@ -1,28 +1,22 @@
 add_executable(loader
     main.c
-    ff.c
-    sdcard.c
-    diskio.c
 )
 
 target_link_libraries(loader
     pico_stdlib
     pico_multicore
-    hardware_spi
 )
 
 # Enable UART serial output for debug messages
 # NOTE: Switch to USB if you initialize TinyUSB:
 #   cd C:\pico-sdk && git submodule update --init lib/tinyusb
 #   Then change the lines below to: usb=1, uart=0
-pico_enable_stdio_usb(loader 1)
-pico_enable_stdio_uart(loader 0)
+pico_enable_stdio_usb(loader 0)
+pico_enable_stdio_uart(loader 1)
 
 # The loader needs to know where the game binary header is
 target_include_directories(loader PRIVATE
     ${CMAKE_BINARY_DIR}/game
-    ${CMAKE_BINARY_DIR}/loader
-
 )
 
 # Generate .uf2 for flashing

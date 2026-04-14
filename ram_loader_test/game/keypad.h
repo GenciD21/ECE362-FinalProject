@@ -12,7 +12,7 @@ void keypad_init_timer(void);
 void keypad_drive_column(void);
 uint8_t keypad_read_rows(void);
 void keypad_isr(void);
-
+void get_point(int argc, char *argv[]);
 void key_push(uint16_t event);
 uint16_t key_pop(void);
 bool key_try_pop(uint16_t *event);

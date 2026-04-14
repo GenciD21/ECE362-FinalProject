@@ -158,8 +158,8 @@ static void draw_score(void) {
 }
 
 static void draw_game_over(void) {
-    LCD_DrawString(STATUS_X, STATUS_KEY_Y, 0xF800, 0x0000, "GAME", 16, 0);
-    LCD_DrawString(STATUS_X, STATUS_TICK_Y, 0xF800, 0x0000, "OVER", 16, 0);
+    LCD_DrawString(STATUS_X, STATUS_KEY_Y, 0xF800, 0x0000, "GOON", 16, 0);
+    LCD_DrawString(STATUS_X, STATUS_TICK_Y, 0xF800, 0x0000, "BOON", 16, 0);
 }
 
 void init_spi_lcd() {

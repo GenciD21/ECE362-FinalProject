@@ -1,24 +1,20 @@
-/**
- * loader/main.c - Core 0 loader program for RP2350
- *
- * This program runs on core 0 and:
- * 1. Copies a game binary into the upper SRAM region (0x20040000)
- * 2. Launches core 1 to execute the loaded game
- * 3. Monitors core 1 via the inter-core FIFO
- *
- * In the future, the embedded game binary will be replaced with
- * SD card reads to dynamically load different games.
- */
-
+#include "pico/stdlib.h"
+#include "hardware/spi.h"
+#include "ff.h"
+#include "diskio.h"
 #include <stdio.h>
 #include <string.h>
-#include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "sdcard.h"
 
-/* Include the game binary as a C array (generated at build time) */
-#include "demo_game_bin.h"
+/**SPI SD CARD****************************************************************/
+#define spi0 ((spi_inst_t *)spi0_hw)
+#define SD_MISO 4 
+#define SD_CS 5
+#define SD_SCK 6
+#define SD_MOSI 3 
+/*******************************************************************/
 
-/* Memory layout constants */
 #define GAME_LOAD_ADDR    ((void *)0x20040000)
 #define CORE1_STACK_TOP   ((uint32_t *)0x20080000)  /* Top of 16KB stack region */
 #define CORE1_VTOR_ADDR   0x20040000                /* Vector table at start of game binary */
@@ -30,6 +26,7 @@
  * @param bin_len  Length of the binary in bytes
  * @return true if launched successfully
  */
+
 static bool load_and_launch_game(const uint8_t *bin, uint32_t bin_len) {
     /* Validate binary size */
     if (bin_len > (240 * 1024)) {
@@ -93,11 +90,92 @@ static bool load_and_launch_game(const uint8_t *bin, uint32_t bin_len) {
     return true;
 }
 
-int main() {
-    /* Initialize stdio for debug output over USB serial */
-    stdio_init_all();
+void init_spi_sdcard() {
 
-    /* Let's PROVE Core 0 is alive by blinking the LED explicitly */
+   gpio_set_function(SD_MISO, GPIO_FUNC_SPI);
+   gpio_set_function(SD_SCK, GPIO_FUNC_SPI);
+   gpio_set_function(SD_MOSI, GPIO_FUNC_SPI);
+
+   gpio_init(SD_CS);
+   gpio_set_dir(SD_CS, GPIO_OUT);
+   gpio_put(SD_CS, 1); 
+   spi_init(spi0, 1000 * 400);
+   
+   spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+}
+
+void disable_sdcard() {
+
+    
+    gpio_put(SD_CS, 1);
+
+    uint8_t data = 0xFF;
+    spi_write_blocking(spi0, &data, 1);
+    gpio_init(SD_MOSI);
+    gpio_set_dir(SD_MOSI, GPIO_OUT);
+    gpio_put(SD_MOSI, 1);
+}
+
+void enable_sdcard() {
+
+    gpio_set_function(SD_MOSI, GPIO_FUNC_SPI);
+    gpio_put(SD_CS, 0);
+    
+}
+
+void sdcard_io_high_speed() {
+    spi_init(spi0, 1000000 * 12);
+}
+
+void init_sdcard_io() {
+    
+    init_spi_sdcard();
+
+    uint8_t dummy = 0xFF;
+    for (int i = 0; i < 10; i++) {
+        spi_write_blocking(spi0, &dummy, 1);
+    }
+    
+    disable_sdcard();
+}
+
+/*******************************************************************/
+
+
+void date(int argc, char *argv[]);
+void command_shell();
+
+// Picture* load_image(const char* image_data);
+// void free_image(Picture* pic);
+#define GAME_BIN_FILE "DEMO_G~5.BIN"
+
+
+int main() {
+    // Initialize the standard input/output library
+
+    stdio_init_all();
+    // init_pio_inputs();
+
+    // run_spi(); //coment this to test the PIO because it does that infinite animation
+
+
+    init_sdcard_io();
+    
+    // SD card functions will initialize everything.
+
+    char *args[] = {NULL, GAME_BIN_FILE};
+
+    mount(2, args);
+    //uint8_t *get_point(const char *path, uint32_t size) 
+
+    uint32_t file_size_bytes = byte_size(2, args);
+    uint8_t *  game_pointer = get_point(GAME_BIN_FILE, file_size_bytes);
+
+    printf("Pointer: %p\n", game_pointer);
+    printf("File size: %lu\n", (unsigned long)file_size_bytes);
+
+     /* Let's PROVE Core 0 is alive by blinking the LED explicitly */
     const uint LED_PIN = 25;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -109,7 +187,6 @@ int main() {
         sleep_ms(100);
     }
 
-    /* Wait for USB serial connection (optional, but helpful for debugging) */
     sleep_ms(1000);
 
     printf("\n");
@@ -117,10 +194,10 @@ int main() {
     printf("  RP2350 Game Loader v0.1\n");
     printf("===========================================\n");
     printf("[LOADER] Running on core %d\n", get_core_num());
-    printf("[LOADER] Game binary size: %u bytes\n", demo_game_bin_len);
+    printf("[LOADER] Game binary size: %lu bytes\n", file_size_bytes);
 
     /* Load and launch the embedded demo game */
-    if (!load_and_launch_game(demo_game_bin, demo_game_bin_len)) {
+    if (!load_and_launch_game(game_pointer, file_size_bytes)) {
         printf("[LOADER] Failed to launch game!\n");
         while (true) {
             gpio_put(LED_PIN, 1);
@@ -130,11 +207,10 @@ int main() {
         }
     }
 
-    /* Main loop - Core 0 stops touching the LED so Core 1 can have it! */
+    // command_shell();
+
     printf("[LOADER] Entering monitor loop...\n");
     while (true) {
         sleep_ms(1000);
     }
-
-    return 0;
 }

@@ -322,7 +322,14 @@ void mount(int argc, char *argv[])
     }
     int res = f_mount(fs, "", 1);
     if (res != FR_OK)
+    {
         print_error(res, "Error occurred while mounting");
+        return;
+    }
+    else
+    {
+        printf("Succesfully mounted SD Card\n");
+    }
 }
 
 void pwd(int argc, char *argv[])
@@ -347,6 +354,7 @@ void rm(int argc, char *argv[])
 
 void cat(int argc, char *argv[])
 {
+    
     for(int i=1; i<argc; i++) {
         FIL fil;        /* File object */
         char line[100]; /* Line buffer */
@@ -365,59 +373,63 @@ void cat(int argc, char *argv[])
             printf(line);
     
         /* Close the file */
+        printf("%p\n", (void*)&fil);
         f_close(&fil);
     }
 }
 
 
-void byte_size(int argc, char *argv[])
-{
-    for(int i=1; i<argc; i++) {
-        FIL fil;        /* File object */
-        char line[100]; /* Line buffer */
-        FRESULT fr;     /* FatFs return code */
+uint8_t *get_point(const char *path, uint32_t size) {
+    FIL fil;
+    FRESULT fr;
+    UINT br;
 
-        /* Open a text file */
-        fr = f_open(&fil, argv[i], FA_READ);
+    uint8_t *buffer = malloc(size);
+    if (!buffer) return NULL;
+
+    fr = f_open(&fil, path, FA_READ);
+    if (fr) {
+        print_error(fr, path);
+        free(buffer);
+        return NULL;
+    }
+
+    fr = f_read(&fil, buffer, size, &br);
+    f_close(&fil);
+
+    if (fr) {
+        print_error(fr, path);
+        free(buffer);
+        return NULL;
+    }
+
+    return buffer;  // caller must free() this
+}
+
+
+
+
+
+uint32_t byte_size(int argc, char *argv[]) 
+{
+    for (int i = 1; i < argc; i++) {
+        FILINFO fno;
+        FRESULT fr;
+
+        fr = f_stat(argv[i], &fno);
         if (fr) {
             print_error(fr, argv[i]);
-            return;
+            continue;
         }
 
-        /* Read every line and display it */
-        int size = 0;
-        while(f_gets(line, sizeof line, &fil))
-            size = size + sizeof(line);
-        /* Close the file */
-        printf("%d\n", size);
-        f_close(&fil);
+        printf("%lu\n", (unsigned long)fno.fsize);
+
+        return (uint32_t) fno.fsize;
     }
 }
 
 
-FILE * get_file_pointer(int argc, char *argv[])
-{
-    for(int i=1; i<argc; i++) {
-        FIL fil;        /* File object */
-        char line[100]; /* Line buffer */
-        FRESULT fr;     /* FatFs return code */
 
-        /* Open a text file */
-        fr = f_open(&fil, argv[i], FA_READ);
-        if (fr) {
-            print_error(fr, argv[i]);
-            return;
-        }
-
-        /* Read every line and display it */
-        int size = 0;
-        while(f_gets(line, sizeof line, &fil))
-            size = size + sizeof(line);
-        /* Close the file */
-        printf("%d\n", size);
-        f_close(&fil);
-    }
-}
 
 
 void cd(int argc, char *argv[])

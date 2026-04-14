@@ -6,14 +6,17 @@
 #include <string.h>
 #include "gpio_pio.h"
 #include "hardware/pio.h"
+#include "pico/multicore.h"
+#include "sdcard.h"
 #include "lcd.h"
 
+
 /**SPI SD CARD****************************************************************/
-#define spi1 ((spi_inst_t *)spi1_hw)
-#define SD_MISO 12
-#define SD_CS 13
-#define SD_SCK 14
-#define SD_MOSI 15 
+#define spi0 ((spi_inst_t *)spi0_hw)
+#define SD_MISO 4 
+#define SD_CS 5
+#define SD_SCK 6
+#define SD_MOSI 3 
 /*******************************************************************/
 
 
@@ -26,9 +29,9 @@ void init_spi_sdcard() {
    gpio_init(SD_CS);
    gpio_set_dir(SD_CS, GPIO_OUT);
    gpio_put(SD_CS, 1); 
-   spi_init(spi1, 1000 * 400);
+   spi_init(spi0, 1000 * 400);
    
-   spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+   spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
 }
 
@@ -38,7 +41,7 @@ void disable_sdcard() {
     gpio_put(SD_CS, 1);
 
     uint8_t data = 0xFF;
-    spi_write_blocking(spi1, &data, 1);
+    spi_write_blocking(spi0, &data, 1);
     gpio_init(SD_MOSI);
     gpio_set_dir(SD_MOSI, GPIO_OUT);
     gpio_put(SD_MOSI, 1);
@@ -52,7 +55,7 @@ void enable_sdcard() {
 }
 
 void sdcard_io_high_speed() {
-    spi_init(spi1, 1000000 * 12);
+    spi_init(spi0, 1000000 * 12);
 }
 
 void init_sdcard_io() {
@@ -61,13 +64,11 @@ void init_sdcard_io() {
 
     uint8_t dummy = 0xFF;
     for (int i = 0; i < 10; i++) {
-        spi_write_blocking(spi1, &dummy, 1);
+        spi_write_blocking(spi0, &dummy, 1);
     }
     
     disable_sdcard();
 }
-
-/*******************************************************************/
 
 void init_uart();
 void init_uart_irq();
@@ -76,14 +77,13 @@ void command_shell();
 
 Picture* load_image(const char* image_data);
 void free_image(Picture* pic);
-
+#define GAME_BIN_FILE "DEMO_G~5.BIN"
 
 
 int main() {
     // Initialize the standard input/output library
-    init_uart();
-    init_uart_irq();
-    // stdio_init_all();
+    
+    stdio_init_all();
     // init_pio_inputs();
 
     // run_spi(); //coment this to test the PIO because it does that infinite animation
@@ -92,12 +92,20 @@ int main() {
     init_sdcard_io();
     
     // SD card functions will initialize everything.
-    command_shell();
+
+    char *args[] = {NULL, GAME_BIN_FILE};
+
+    mount(2, args);
+    //uint8_t *get_point(const char *path, uint32_t size) 
+
+    uint32_t file_size_bytes = byte_size(2, args);
+    uint8_t *  game_pointer = get_point(GAME_BIN_FILE, file_size_bytes);
+
+    printf("Pointer: %p\n", game_pointer);
+    printf("File size: %lu\n", (unsigned long)file_size_bytes);
 
     for(;;)
     {
-    //      uint32_t output = get_buffer();
-    // //    printf("DMA: %08x\n", output);
-    //     sleep_ms(500);
-    };
+
+    }
 }

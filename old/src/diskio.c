@@ -5,7 +5,7 @@
 #include "diskio.h"		/* Declarations of disk functions */
 #include <stdio.h>
 
-spi_inst_t *sd = spi1; // the SPI interface to use for the SD card
+spi_inst_t *sd = spi0; // the SPI interface to use for the SD card
 
 // Weak definitions for the functions that must be implemented elsewhere
 // to allow the SPI interface for the SD card to work.
