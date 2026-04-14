@@ -1,7 +1,6 @@
 add_executable(demo_game
     tetris.c
     lcd.c
-    keypad.c
 )
 
 # Link against pico-sdk libraries — games get full SDK access
@@ -9,7 +8,6 @@ target_link_libraries(demo_game
     pico_stdlib
     hardware_gpio
     hardware_spi
-    hardware_irq
     hardware_timer
 )
 

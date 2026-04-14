@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "lcd.h"
-#include "keypad.h"
 
 void nano_wait(int t);
 

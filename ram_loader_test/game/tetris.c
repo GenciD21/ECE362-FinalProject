@@ -13,7 +13,6 @@
 #include "hardware/spi.h"
 #include "hardware/timer.h"
 #include "lcd.h"
-#include "keypad.h"
 #include <stdio.h>
 
 //TFT, using SPI1
@@ -23,9 +22,27 @@
 #define PIN_SDI 31
 #define PIN_SCK 30
 #define STATUS_X 185
-#define STATUS_KEY_Y 10
-#define STATUS_TICK_Y 30
 #define STATUS_TITLE_Y 50
+
+//button pins (active low, wired to ground)
+#define PIN_UP     6
+#define PIN_DOWN   4
+#define PIN_LEFT   5
+#define PIN_RIGHT  3
+#define PIN_A      2
+#define PIN_B      7
+#define PIN_START  12
+#define PIN_SELECT 13
+#define NUM_BUTTONS 8
+
+static const uint button_pins[NUM_BUTTONS] = {
+    PIN_UP, PIN_DOWN, PIN_LEFT, PIN_RIGHT,
+    PIN_A, PIN_B, PIN_START, PIN_SELECT,
+};
+
+//button state for edge detection
+static bool button_prev[NUM_BUTTONS];
+static bool button_curr[NUM_BUTTONS];
 
 //rendering 
 static const uint16_t colors[] = {
@@ -158,8 +175,8 @@ static void draw_score(void) {
 }
 
 static void draw_game_over(void) {
-    LCD_DrawString(STATUS_X, STATUS_KEY_Y, 0xF800, 0x0000, "GAME", 16, 0);
-    LCD_DrawString(STATUS_X, STATUS_TICK_Y, 0xF800, 0x0000, "OVER", 16, 0);
+    LCD_DrawString(STATUS_X, 10, 0xF800, 0x0000, "GAME", 16, 0);
+    LCD_DrawString(STATUS_X, 30, 0xF800, 0x0000, "OVER", 16, 0);
 }
 
 void init_spi_lcd() {
@@ -214,11 +231,34 @@ static void init_board(void) {
     render();
 }
 
+//setup button gpio pins as inputs with pull-ups
+static void init_buttons(void) {
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        gpio_init(button_pins[i]);
+        gpio_set_dir(button_pins[i], GPIO_IN);
+        gpio_pull_up(button_pins[i]);
+        button_prev[i] = true;
+        button_curr[i] = true;
+    }
+}
+
+//read all buttons
+static void poll_buttons(void) {
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        button_prev[i] = button_curr[i];
+        button_curr[i] = gpio_get(button_pins[i]);
+    }
+}
+
+//check if button was just pressed (falling edge)
+static bool button_pressed(int index) {
+    return (button_prev[index] && !button_curr[index]);
+}
+
 static void init_system(void) {
     init_spi_lcd();
     LCD_Setup();
-    keypad_init_pins();
-    keypad_init_timer();
+    init_buttons();
 
     next_tick = delayed_by_us(get_absolute_time(), GAME_TICK_US);
 
@@ -382,17 +422,12 @@ static void try_move(int dr, int dc) {
     render();
 }
 
-static void handle_input(char input) {
+static void handle_buttons(void) {
     if (game_over) return;
-    if (input == '4') {
-        try_move(0, -1); //left
-    } else if (input == '6') {
-        try_move(0, 1);  //right
-    } else if (input == '5') {
-        try_rotate();     //rotate
-    } else if (input == '2') {
-        hard_drop();      //hard drop
-    }
+    if (button_pressed(2)) try_move(0, -1);  //left
+    if (button_pressed(3)) try_move(0, 1);   //right
+    if (button_pressed(1)) hard_drop();       //down = hard drop
+    if (button_pressed(4)) try_rotate();      //A = rotate
 }
 
 static void tick_game(void) {
@@ -418,8 +453,6 @@ static void tick_game(void) {
 }
 
 int main() {
-    char last_pressed = '-';
-
     init_system();
     rng_state = time_us_32();
     spawn_piece();
@@ -427,14 +460,8 @@ int main() {
     draw_score();
 
     while (true) {
-        uint16_t event;
-
-        while (key_try_pop(&event)) {
-            if ((event >> 8) & 1u) {
-                last_pressed = (char)(event & 0xFF);
-                handle_input(last_pressed);
-            }
-        }
+        poll_buttons();
+        handle_buttons();
 
         if (time_reached(next_tick)) {
             next_tick = delayed_by_us(get_absolute_time(), GAME_TICK_US);
