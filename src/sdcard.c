@@ -360,9 +360,36 @@ void cat(int argc, char *argv[])
         }
 
         /* Read every line and display it */
+        
         while(f_gets(line, sizeof line, &fil))
             printf(line);
+    
         /* Close the file */
+        f_close(&fil);
+    }
+}
+
+
+void byte_size(int argc, char *argv[])
+{
+    for(int i=1; i<argc; i++) {
+        FIL fil;        /* File object */
+        char line[100]; /* Line buffer */
+        FRESULT fr;     /* FatFs return code */
+
+        /* Open a text file */
+        fr = f_open(&fil, argv[i], FA_READ);
+        if (fr) {
+            print_error(fr, argv[i]);
+            return;
+        }
+
+        /* Read every line and display it */
+        int size = 0;
+        while(f_gets(line, sizeof line, &fil))
+            size = size + sizeof(line);
+        /* Close the file */
+        printf(size);
         f_close(&fil);
     }
 }
