@@ -11,7 +11,7 @@
 /**SPI SD CARD****************************************************************/
 #define spi1 ((spi_inst_t *)spi1_hw)
 #define SD_MISO 12
-#define SD_CS 17
+#define SD_CS 13
 #define SD_SCK 14
 #define SD_MOSI 15 
 /*******************************************************************/
@@ -81,23 +81,23 @@ void free_image(Picture* pic);
 
 int main() {
     // Initialize the standard input/output library
-    // init_uart();
-    // init_uart_irq();
-    stdio_init_all();
-    init_pio_inputs();
+    init_uart();
+    init_uart_irq();
+    // stdio_init_all();
+    // init_pio_inputs();
 
-    run_spi(); //coment this to test the PIO because it does that infinite animation
+    // run_spi(); //coment this to test the PIO because it does that infinite animation
 
 
-    // init_sdcard_io();
+    init_sdcard_io();
     
     // SD card functions will initialize everything.
-    // command_shell();
+    command_shell();
 
     for(;;)
     {
-         uint32_t output = get_buffer();
-    //    printf("DMA: %08x\n", output);
-        sleep_ms(500);
+    //      uint32_t output = get_buffer();
+    // //    printf("DMA: %08x\n", output);
+    //     sleep_ms(500);
     };
 }
