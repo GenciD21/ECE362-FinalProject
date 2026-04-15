@@ -624,9 +624,11 @@ int main() {
             tick_game();
         }
 
+        /*
         if (time_reached(next_audio_note)){
             next_audio_note = delayed_by_us(get_absolute_time(), handle_audio() * 1000);
         }
+        */
 
         busy_wait_us_32(500);
     }
