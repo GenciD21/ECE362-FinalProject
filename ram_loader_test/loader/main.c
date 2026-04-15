@@ -148,7 +148,7 @@ void command_shell();
 
 // Picture* load_image(const char* image_data);
 // void free_image(Picture* pic);
-#define GAME_BIN_FILE "DEMO_G~5.BIN"
+#define GAME_BIN_FILE "DEMO_G~1.BIN"
 
 
 int main() {
@@ -164,18 +164,13 @@ int main() {
     
     // SD card functions will initialize everything.
 
-    char *args[] = {NULL, GAME_BIN_FILE};
 
-    mount(2, args);
-    //uint8_t *get_point(const char *path, uint32_t size) 
-
-    uint32_t file_size_bytes = byte_size(2, args);
-    uint8_t *  game_pointer = get_point(GAME_BIN_FILE, file_size_bytes);
-
-    printf("Pointer: %p\n", game_pointer);
-    printf("File size: %lu\n", (unsigned long)file_size_bytes);
+    // char *args_ls[] = {NULL, '/'};
+    // ls(2, args_ls);
 
      /* Let's PROVE Core 0 is alive by blinking the LED explicitly */
+      char *args[] = {NULL, GAME_BIN_FILE};
+    mount(2, args);
     const uint LED_PIN = 25;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -194,7 +189,16 @@ int main() {
     printf("  RP2350 Game Loader v0.1\n");
     printf("===========================================\n");
     printf("[LOADER] Running on core %d\n", get_core_num());
+
+    //uint8_t *get_point(const char *path, uint32_t size) 
+
+    uint32_t file_size_bytes = byte_size(2, args);
+    uint8_t *  game_pointer = get_point(GAME_BIN_FILE, file_size_bytes);
+
+    printf("Pointer: %p\n", game_pointer);
+    printf("File size: %lu\n", (unsigned long)file_size_bytes);
     printf("[LOADER] Game binary size: %lu bytes\n", file_size_bytes);
+
 
     /* Load and launch the embedded demo game */
     if (!load_and_launch_game(game_pointer, file_size_bytes)) {
