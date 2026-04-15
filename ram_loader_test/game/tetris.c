@@ -30,14 +30,14 @@
 #define STATUS_TITLE_Y 50
 
 //buttons (to ground)
-#define PIN_UP     6
-#define PIN_DOWN   4
-#define PIN_LEFT   5
-#define PIN_RIGHT  3
-#define PIN_A      2
-#define PIN_B      7
-#define PIN_START  12
-#define PIN_SELECT 13
+#define PIN_UP     0
+#define PIN_DOWN   9
+#define PIN_LEFT   10
+#define PIN_RIGHT  7
+#define PIN_A      8
+#define PIN_B      0
+#define PIN_START  0
+#define PIN_SELECT 0
 #define NUM_BUTTONS 8
 
 static const uint button_pins[NUM_BUTTONS] = {
