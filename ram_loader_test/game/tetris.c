@@ -12,8 +12,13 @@
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
 #include "hardware/timer.h"
+#include "hardware/pio.h"
 #include "lcd.h"
 #include <stdio.h>
+
+
+
+
 
 //TFT, using SPI1
 #define PIN_CS 29
@@ -24,7 +29,7 @@
 #define STATUS_X 185
 #define STATUS_TITLE_Y 50
 
-//button pins (active low, wired to ground)
+//buttons (to ground)
 #define PIN_UP     6
 #define PIN_DOWN   4
 #define PIN_LEFT   5
@@ -40,9 +45,18 @@ static const uint button_pins[NUM_BUTTONS] = {
     PIN_A, PIN_B, PIN_START, PIN_SELECT,
 };
 
-//button state for edge detection
-static bool button_prev[NUM_BUTTONS];
-static bool button_curr[NUM_BUTTONS];
+//pio button reader
+PIO button_pio;
+uint button_sm;
+
+//move button states into FIFO to drain later
+static const uint16_t buttons_prog[] = { 0x4020, 0x8020 }; 
+// in pins,32 ; push noblock
+static const struct pio_program buttons_program = { .instructions = buttons_prog, .length = 2, .origin = -1 };
+
+//button state for edge detection (each bit = one gpio pin)
+static uint32_t pins_prev = 0xFFFFFFFF;
+static uint32_t pins_curr = 0xFFFFFFFF;
 
 //rendering 
 static const uint16_t colors[] = {
@@ -71,13 +85,10 @@ bool dirty[GRID_H][GRID_W];
 uint8_t locked[GRID_H][GRID_W];
 
 //all 7 tetromino shapes with 4 rotations each
-//each rotation is 4 blocks of {row, col} offsets
-//ordered to match color table: I=1, J=2, L=3, O=4, S=5, T=6, Z=7
+//index block positions relative to some root position
 #define NUM_PIECES 7
 #define NUM_ROTATIONS 4
 #define PIECE_BLOCKS 4
-//rotations use (r,c)->(c,N-1-r) so 4 rotations returns to start
-//I uses 4x4 box, J/L/S/T/Z use 3x3 box, O uses 2x2 box
 static const int pieces[NUM_PIECES][NUM_ROTATIONS][PIECE_BLOCKS][2] = {
     // I
     {{{1,0},{1,1},{1,2},{1,3}},
@@ -116,7 +127,6 @@ static const int pieces[NUM_PIECES][NUM_ROTATIONS][PIECE_BLOCKS][2] = {
      {{0,1},{1,0},{1,1},{2,0}}},
 };
 
-//simple random number generator
 uint32_t rng_state = 1;
 
 static int random_piece(void) {
@@ -130,11 +140,11 @@ int piece_rot = 0;
 int piece_row = 0;
 int piece_col = 3;
 
-//game state
+
 bool game_over = false;
 uint32_t score = 0;
 
-//variable tick rate
+
 uint32_t GAME_TICK_US = 500000;
 
 uint32_t tick_count = 0;
@@ -201,7 +211,7 @@ void init_spi_lcd() {
 static void init_board(void) {
     LCD_Clear(0x0000);
 
-    // Draw left and right borders (1 tile wide each)
+    //draw game border
     for (int r = 0; r < GRID_H; r++) {
         LCD_DrawFillRectangle(
             OFFSET_X - TILE_SIZE, OFFSET_Y + r * TILE_SIZE,
@@ -213,13 +223,11 @@ static void init_board(void) {
             colors[8]);
     }
 
-    // Draw bottom border
     LCD_DrawFillRectangle(
         OFFSET_X - TILE_SIZE, OFFSET_Y + GRID_H * TILE_SIZE,
         OFFSET_X + GRID_W * TILE_SIZE + TILE_SIZE - 1, OFFSET_Y + GRID_H * TILE_SIZE + TILE_SIZE - 1,
         colors[8]);
 
-    // Label
     LCD_DrawString(STATUS_X, STATUS_TITLE_Y, 0xFFFF, 0x0000, "TETRIS", 16, 0);
 
     for (int r = 0; r < GRID_H; r++) {
@@ -231,28 +239,39 @@ static void init_board(void) {
     render();
 }
 
-//setup button gpio pins as inputs with pull-ups
+//setup pio to read all gpio pins for button input
 static void init_buttons(void) {
     for (int i = 0; i < NUM_BUTTONS; i++) {
         gpio_init(button_pins[i]);
         gpio_set_dir(button_pins[i], GPIO_IN);
         gpio_pull_up(button_pins[i]);
-        button_prev[i] = true;
-        button_curr[i] = true;
     }
+
+    button_sm = pio_claim_unused_sm(pio0, true);
+    uint offset = pio_add_program(pio0, &buttons_program);
+
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset, offset + buttons_program.length - 1);
+    sm_config_set_in_pins(&c, 0);
+    sm_config_set_clkdiv(&c, 5000);
+    pio_sm_init(pio0, button_sm, offset, &c);
+    pio_sm_set_enabled(pio0, button_sm, true);
 }
 
-//read all buttons
+//drain pio fifo
 static void poll_buttons(void) {
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        button_prev[i] = button_curr[i];
-        button_curr[i] = gpio_get(button_pins[i]);
+    pins_prev = pins_curr;
+    while (!pio_sm_is_rx_fifo_empty(pio0, button_sm)) {
+        pins_curr = pio_sm_get(pio0, button_sm);
     }
 }
 
-//check if button was just pressed (falling edge)
+//check if button was just pressed (falling edge on its pin)
 static bool button_pressed(int index) {
-    return (button_prev[index] && !button_curr[index]);
+    uint pin = button_pins[index];
+    bool was_up = (pins_prev >> pin) & 1;
+    bool is_down = !((pins_curr >> pin) & 1);
+    return was_up && is_down;
 }
 
 static void init_system(void) {

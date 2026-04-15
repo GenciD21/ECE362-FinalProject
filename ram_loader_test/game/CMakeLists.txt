@@ -9,6 +9,7 @@ target_link_libraries(demo_game
     hardware_gpio
     hardware_spi
     hardware_timer
+    hardware_pio
 )
 
 # Build as no_flash (RAM-only binary)
