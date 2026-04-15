@@ -21,6 +21,10 @@
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "hardware/adc.h"
+#include "hardware/resets.h"
+#include "hardware/clocks.h"
+#include "hardware/structs/iobank0.h"
+#include "hardware/structs/padsbank0.h"
 #include "support.h"
 
 
@@ -489,9 +493,9 @@ static int duty_cycle = 0;
 static int dir = 0;
 static int color = 0;
 
-void set_freq(int chan, float f);
+void set_freq(int chan, int f);
 
-static float volume_lol = 1;
+static int volume_lol = 256; // fixed-point 8-bit: 256 = full volume, 128 = half, 0 = mute
 
 
 //volume from 0 to 1
@@ -499,41 +503,82 @@ void pwm_audio_handler() {
     // acknowledge interrupt
     uint32_t slice = pwm_gpio_to_slice_num(36);
     pwm_hw->intr = 1 << slice; 
+
+    offset0 += step0;
+    offset1 += step1;
+
+    if (offset0 >= N << 16){
+        offset0 -= N << 16;
+    }
+
+    if (offset1 >= N << 16){
+        offset1 -= N << 16;
+    }
+
+    //create samp, divide by 2
+    uint32_t samp = wavetable[offset0 >> 16] + wavetable[offset1 >> 16];
+    samp /= 2;
+
+    samp = (samp * pwm_hw->slice[slice].top) / (1 << 16);
+
+    //write samp to duty cycle, scale by volume (fixed-point >>8)
+    pwm_hw->slice[slice].cc = (samp * volume_lol) >> 8;
 }
 
 
 void init_pwm_audio() {
-    //set as pwm out
+    //set as pwm out - direct register write to avoid SDK spinlocks
     gpio_set_function(36, GPIO_FUNC_PWM);
-    //get slice num
+
     uint32_t slice = pwm_gpio_to_slice_num(36);
-    //set clock divider
-    pwm_config pc = pwm_get_default_config();
-    pwm_config_set_clkdiv(&pc, 150.f);
-    pwm_init(slice, &pc, true);
-    
-    //set period to from support.c  - 1 
+
+    //disable slice first via direct register access
+    pwm_hw->slice[slice].csr = 0;
+
+    //set clock divider to 150 (integer 150, frac 0) directly
+    pwm_hw->slice[slice].div = 150u << PWM_CH0_DIV_INT_LSB;
+
+    //set period
     pwm_hw->slice[slice].top = (1000000/RATE) - 1;
-    //set duty cycle
-    pwm_hw->slice[slice].cc = 0; //duty cycle of zero for now
 
-    //enable
-    pwm_set_enabled(slice, true);
+    //set duty cycle to zero
+    pwm_hw->slice[slice].cc = 0;
 
-    //setup irq 
-    pwm_clear_irq(slice);
-    pwm_set_irq0_enabled(slice, true);
-    //Interrupt number = 8
-    irq_set_exclusive_handler(PWM_IRQ_WRAP_0, pwm_audio_handler);
-    irq_set_enabled(PWM_IRQ_WRAP_0, true);
+    //reset counter
+    pwm_hw->slice[slice].ctr = 0;
+
+    //enable slice (set EN bit directly)
+    hw_set_bits(&pwm_hw->slice[slice].csr, PWM_CH0_CSR_EN_BITS);
+
+    //setup sine wave
+    init_wavetable();
+
+    //setup irq - direct register access to avoid SDK spinlocks
+    pwm_hw->intr = 1u << slice;                          //clear pending
+    hw_set_bits(&pwm_hw->inte, 1u << slice);            //enable wrap IRQ for this slice
+
+    //set handler directly in NVIC vector table
+    ((void (**)(void))scb_hw->vtor)[16 + PWM_IRQ_WRAP_0] = pwm_audio_handler;
+    //enable in NVIC
+    *((volatile uint32_t *)(PPB_BASE + M33_NVIC_ISER0_OFFSET + (PWM_IRQ_WRAP_0 / 32) * 4)) = 1u << (PWM_IRQ_WRAP_0 % 32);
 }
 
 void init_adc() {
-    adc_init();
-    adc_gpio_init(ADC_BASE_PIN + 5);
-    //Select channel 5 as input
-    //adc_hw->cs |= 0x5u << (ADC_CS_AINSEL_LSB);
-    adc_select_input(0x5u);
+    //enable the ADC clock directly - no SDK calls (they use floats)
+    //select USB PLL (48MHz) as aux source, div=1, enable
+    clocks_hw->clk[clk_adc].div = 1u << CLOCKS_CLK_ADC_DIV_INT_LSB;
+    clocks_hw->clk[clk_adc].ctrl =
+        (CLOCKS_CLK_ADC_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB << CLOCKS_CLK_ADC_CTRL_AUXSRC_LSB) |
+        CLOCKS_CLK_ADC_CTRL_ENABLE_BITS;
+
+    //take ADC out of reset
+    hw_clear_bits(&resets_hw->reset, RESETS_RESET_ADC_BITS);
+    while (!(resets_hw->reset_done & RESETS_RESET_ADC_BITS))
+        tight_loop_contents();
+
+    //now safe to access ADC registers
+    adc_hw->cs = 0;
+    adc_hw->cs = (1u << ADC_CS_EN_LSB) | (0x5u << ADC_CS_AINSEL_LSB);
 }
 
 // Frequencies (Hz)
@@ -571,25 +616,32 @@ int melody[][2] = {
     {NOTE_C5, Q},  {NOTE_A4, Q},  {NOTE_A4, Q},  {REST,    Q}
 };
 static int note_num = 0;
-static float note;
-static float new_volume;
 
-//returns next time needed
-float handle_audio(){
+//returns next duration in ms
+int handle_audio(){
     if (note_num == 39){
-        note_num = 0; 
+        note_num = 0;
     }
 
-    note = melody[note_num][0];
-    
-    new_volume = (float)adc_read() / 4096.0f;
-    new_volume = round(new_volume * 20) / 20.0f; 
+    int note = melody[note_num][0];
 
-    if (new_volume - volume_lol > 0.10 || new_volume - volume_lol < -0.10){
+    // adc_read returns 0-4095, scale to 0-256 for fixed-point volume
+    //int raw = adc_read();
+    // start single conversion and wait for result - direct register access
+    hw_set_bits(&adc_hw->cs, ADC_CS_START_ONCE_BITS);
+    while (!(adc_hw->cs & ADC_CS_READY_BITS))
+        tight_loop_contents();
+    int raw = adc_hw->result;
+    int new_volume = (raw * 256) / 4096;
+    new_volume = (new_volume / 13) * 13; // quantize to ~20 steps
+
+    // only update if changed by more than ~10% (25/256)
+    int diff = new_volume - volume_lol;
+    if (diff > 25 || diff < -25){
         volume_lol = new_volume;
     }
 
-    set_freq(0, note); // Set initial frequency for channel 0
+    set_freq(0, note);
     return melody[note_num++][1];
 }
 
@@ -615,6 +667,7 @@ int main() {
     init_pwm_audio();
     init_adc();
 
+    //set_freq(0, 400);
     while (true) {
         poll_buttons();
         handle_buttons();
@@ -624,11 +677,12 @@ int main() {
             tick_game();
         }
 
-        /*
+        
         if (time_reached(next_audio_note)){
             next_audio_note = delayed_by_us(get_absolute_time(), handle_audio() * 1000);
         }
-        */
+
+
 
         busy_wait_us_32(500);
     }

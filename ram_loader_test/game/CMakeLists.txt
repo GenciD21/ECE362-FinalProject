@@ -13,6 +13,7 @@ target_link_libraries(demo_game
     hardware_pio
     hardware_pwm
     hardware_adc
+    hardware_clocks
 )
 
 # Build as no_flash (RAM-only binary)
