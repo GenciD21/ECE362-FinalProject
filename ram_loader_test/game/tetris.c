@@ -50,7 +50,7 @@ PIO button_pio;
 uint button_sm;
 
 //move button states into FIFO to drain later
-static const uint16_t buttons_prog[] = { 0x4020, 0x8020 }; 
+static const uint16_t buttons_prog[] = { 0x4000, 0x8000 };
 // in pins,32 ; push noblock
 static const struct pio_program buttons_program = { .instructions = buttons_prog, .length = 2, .origin = -1 };
 
