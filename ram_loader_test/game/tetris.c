@@ -612,6 +612,8 @@ int main() {
     draw_score();
 
     absolute_time_t next_audio_note = get_absolute_time();
+    init_pwm_audio();
+    init_adc();
 
     while (true) {
         poll_buttons();
