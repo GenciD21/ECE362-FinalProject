@@ -8,6 +8,11 @@
 #include "hardware/pio.h"
 #include "lcd.h"
 
+#include "pico/stdlib.h"
+#include "pico/multicore.h"
+//#include <cstring>
+#include "core1_bin.h"
+
 /**SPI SD CARD****************************************************************/
 #define spi1 ((spi_inst_t *)spi1_hw)
 #define SD_MISO 12
@@ -15,6 +20,9 @@
 #define SD_SCK 14
 #define SD_MOSI 15 
 /*******************************************************************/
+
+//#define SDCARD
+#define LINKER
 
 
 void init_spi_sdcard() {
@@ -78,12 +86,28 @@ Picture* load_image(const char* image_data);
 void free_image(Picture* pic);
 
 
+/***************************************************************** */
+
+// Must be RAM-resident and 256-byte aligned (Cortex-M33 VTOR)
+static uint8_t __attribute__((aligned(256), section(".uninitialized_data")))
+    core1_ram[sizeof(core1_bin)];
+
+void start_core1() {
+    memcpy(core1_ram, core1_bin, sizeof(core1_bin));
+    __dmb();
+
+    // ARM vector table: word 0 = initial SP, word 1 = reset handler
+    uint32_t entry = ((uint32_t *)core1_ram)[1];
+    multicore_launch_core1((void (*)(void))entry);
+}
+
 
 int main() {
     // Initialize the standard input/output library
     // init_uart();
     // init_uart_irq();
     stdio_init_all();
+    #ifdef SDCARD
     init_pio_inputs();
 
     run_spi(); //coment this to test the PIO because it does that infinite animation
@@ -100,4 +124,16 @@ int main() {
     //    printf("DMA: %08x\n", output);
         sleep_ms(500);
     };
+    #endif 
+
+    #ifdef LINKER
+        stdio_init_all();
+        start_core1();
+
+        // core0 continues here while core1 runs independently
+        while (true) {
+            tight_loop_contents();
+        }
+
+    #endif
 }
