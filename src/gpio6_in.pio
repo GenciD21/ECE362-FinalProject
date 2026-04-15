@@ -1,6 +1,24 @@
 .program gpio6_in
 
+mov x, pins
 .wrap_target
-    in pins, 6      
-    push block     
+read_loop:
+    mov isr, null
+    in pins, 6
+    mov y, isr
+
+    jmp x!=y, changed
+    jmp read_loop
+
+changed:
+    push
+    mov x, y
 .wrap
+
+% c-sdk {
+static inline pio_sm_config gpio6_in_program_get_default_config(uint offset) {
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset + gpio6_in_wrap_target, offset + gpio6_in_wrap);
+    return c;
+}
+%}
