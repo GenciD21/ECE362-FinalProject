@@ -15,6 +15,13 @@
 #include "hardware/pio.h"
 #include "lcd.h"
 #include <stdio.h>
+#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
+#include "pico/stdlib.h"
+#include "hardware/pwm.h"
+#include "hardware/adc.h"
+#include "support.h"
 
 
 
@@ -471,12 +478,140 @@ static void tick_game(void) {
     render();
 }
 
+
+
+
+
+/*  AUDIO  */
+
+
+static int duty_cycle = 0;
+static int dir = 0;
+static int color = 0;
+
+void set_freq(int chan, float f);
+
+static float volume_lol = 1;
+
+
+//volume from 0 to 1
+void pwm_audio_handler() {
+    // acknowledge interrupt
+    uint32_t slice = pwm_gpio_to_slice_num(36);
+    pwm_hw->intr = 1 << slice; 
+}
+
+
+void init_pwm_audio() {
+    //set as pwm out
+    gpio_set_function(36, GPIO_FUNC_PWM);
+    //get slice num
+    uint32_t slice = pwm_gpio_to_slice_num(36);
+    //set clock divider
+    pwm_config pc = pwm_get_default_config();
+    pwm_config_set_clkdiv(&pc, 150.f);
+    pwm_init(slice, &pc, true);
+    
+    //set period to from support.c  - 1 
+    pwm_hw->slice[slice].top = (1000000/RATE) - 1;
+    //set duty cycle
+    pwm_hw->slice[slice].cc = 0; //duty cycle of zero for now
+
+    //enable
+    pwm_set_enabled(slice, true);
+
+    //setup irq 
+    pwm_clear_irq(slice);
+    pwm_set_irq0_enabled(slice, true);
+    //Interrupt number = 8
+    irq_set_exclusive_handler(PWM_IRQ_WRAP_0, pwm_audio_handler);
+    irq_set_enabled(PWM_IRQ_WRAP_0, true);
+}
+
+void init_adc() {
+    adc_init();
+    adc_gpio_init(ADC_BASE_PIN + 5);
+    //Select channel 5 as input
+    //adc_hw->cs |= 0x5u << (ADC_CS_AINSEL_LSB);
+    adc_select_input(0x5u);
+}
+
+// Frequencies (Hz)
+#define NOTE_A4  440
+#define NOTE_GS4 415
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_D5  587
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_G5  784
+#define NOTE_A5  880  // Added definition
+#define REST     0
+
+// Corrected Durations (ms) for 144 BPM
+#define H  800  // Half
+#define Q  400  // Quarter
+#define E  200  // Eighth
+#define S  100  // Sixteenth
+#define ED 300  // Dotted Eighth
+
+// Melody Array: {Frequency, Duration}
+// This uses the {freq, dur} pair structure from your first request
+int melody[][2] = {
+    // Phrase 1
+    {NOTE_E5, Q},  {NOTE_B4, E},  {NOTE_C5, E},  {NOTE_D5, Q},  {NOTE_C5, E},  {NOTE_B4, E},
+    {NOTE_A4, Q},  {NOTE_A4, E},  {NOTE_C5, E},  {NOTE_E5, Q},  {NOTE_D5, E},  {NOTE_C5, E},
+    {NOTE_B4, ED}, {NOTE_C5, S},  {NOTE_D5, Q},  {NOTE_E5, Q},  
+    {NOTE_C5, Q},  {NOTE_A4, Q},  {NOTE_A4, Q},  {REST,    Q},
+
+    // Phrase 2
+    {NOTE_D5, ED}, {NOTE_F5, S},  {NOTE_A5, Q},  {NOTE_G5, E},  {NOTE_F5, E},
+    {NOTE_E5, ED}, {NOTE_C5, S},  {NOTE_E5, Q},  {NOTE_D5, E},  {NOTE_C5, E},
+    {NOTE_B4, E},  {NOTE_B4, E},  {NOTE_C5, E},  {NOTE_D5, Q},  {NOTE_E5, Q},
+    {NOTE_C5, Q},  {NOTE_A4, Q},  {NOTE_A4, Q},  {REST,    Q}
+};
+static int note_num = 0;
+static float note;
+static float new_volume;
+
+//returns next time needed
+float handle_audio(){
+    if (note_num == 39){
+        note_num = 0; 
+    }
+
+    note = melody[note_num][0];
+    
+    new_volume = (float)adc_read() / 4096.0f;
+    new_volume = round(new_volume * 20) / 20.0f; 
+
+    if (new_volume - volume_lol > 0.10 || new_volume - volume_lol < -0.10){
+        volume_lol = new_volume;
+    }
+
+    set_freq(0, note); // Set initial frequency for channel 0
+    return melody[note_num++][1];
+}
+
+
+
+
+
+
+/*  AUDIO  */
+
+
+
+
+
 int main() {
     init_system();
     rng_state = time_us_32();
     spawn_piece();
     render();
     draw_score();
+
+    absolute_time_t next_audio_note = get_absolute_time();
 
     while (true) {
         poll_buttons();
@@ -487,11 +622,17 @@ int main() {
             tick_game();
         }
 
+        if (time_reached(next_audio_note)){
+            next_audio_note = delayed_by_us(get_absolute_time(), handle_audio() * 1000);
+        }
+
         busy_wait_us_32(500);
     }
 
     return 0;
 }
+
+
 /* -------------------------------------------------------------
  * CORE 1 OS/SDK BOOTSTRAP
  * ------------------------------------------------------------- */

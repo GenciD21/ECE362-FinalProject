@@ -1,6 +1,7 @@
 add_executable(demo_game
     tetris.c
     lcd.c
+    support.c
 )
 
 # Link against pico-sdk libraries — games get full SDK access
@@ -10,6 +11,8 @@ target_link_libraries(demo_game
     hardware_spi
     hardware_timer
     hardware_pio
+    hardware_pwm
+    hardware_adc
 )
 
 # Build as no_flash (RAM-only binary)
